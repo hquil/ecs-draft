@@ -5,20 +5,11 @@ use crate::{
 
 use core::marker::PhantomData;
 
-pub trait Query<'a> {
-	type Tuple;
-	fn query_entity(world: &'a World, entity: &'a Entity) -> Option<Self::Tuple>;
-
-	fn query(world: &'a World) -> QueryIter<'a, Self::Tuple>;
-}
-
-pub trait QueryMut<'a> {
-	type Tuple;
-	fn query_entity_mut(world: &'a mut World, entity: &'a Entity) -> Option<Self::Tuple>;
-	fn query_mut(world: &'a mut World) -> QueryMutIter<'a, Self::Tuple>;
-}
-
+/// Provides the ability to immutably fetch a single query element.
+///
+/// A query element can be a reference type, like `&Position`
 pub trait Fetch<'a>: Sized {
+	/// Returns a single query element from the [Entity] in the [World]
 	fn fetch(world: &'a World, entity: &'a Entity) -> Option<Self>;
 }
 
@@ -28,7 +19,11 @@ impl<'a, C: 'static + Component> Fetch<'a> for &'a C {
 	}
 }
 
+/// Provides the ability to mutably fetch a single query element.
+///
+/// A query element can be a reference type, like `&mut Position`
 pub trait FetchMut<'a>: Sized {
+	/// Returns a single query element from the [Entity] in the mutable [World]
 	fn fetch_mut(world: &'a mut World, entity: &'a Entity) -> Option<Self>;
 }
 
@@ -44,10 +39,62 @@ impl<'a, C: 'static + Component> FetchMut<'a> for &'a mut C {
 	}
 }
 
+/// Represents any type that can be fetched immutably from the world.
+///
+/// This is implemented for any generic tuple (&A, &B, ...) for which the generics implement [Fetch]
+pub trait Query<'a> {
+	/// The entire [Query]able representation, ex. `(&Position, &&str)`.
+	///
+	/// This is useful, since the types that come in can be used directly as the output type.
+	/// Note that this is not restricted to Tuples, however, for now the naming seems clearer this way.
+	type Tuple;
+
+	/// Returns a single set of query elements specified in [`Self::Tuple`].
+	fn query_entity(world: &'a World, entity: &'a Entity) -> Option<Self::Tuple>;
+
+	/// Returns a [QueryIter] for all query elements specified in [`Self::Tuple`]
+	fn query(world: &'a World) -> QueryIter<'a, Self::Tuple>;
+}
+
+/// Represents any type that can be fetched mutably from the world.
+///
+/// This is implemented for any generic tuple (&A, &mut B, ...) for which the generics implement [FetchMut]
+pub trait QueryMut<'a> {
+	/// The entire [Query]able representation, ex. `(&mut Position, &&str)`.
+	type Tuple;
+
+	/// Returns a single set of query elements specified in [`Self::Tuple`].
+	fn query_entity_mut(world: &'a mut World, entity: &'a Entity) -> Option<Self::Tuple>;
+
+	/// Returns a [QueryMutIter] for all query elements specified in [`Self::Tuple`].
+	fn query_mut(world: &'a mut World) -> QueryMutIter<'a, Self::Tuple>;
+}
+
+/// A [Query] iterator for an immutable [World]
+pub struct QueryIter<'a, Q> {
+	world: &'a World,
+	entity_index: usize,
+	marker: PhantomData<Q>,
+}
+
+impl<'a, Q: Query<'a> + 'a> Iterator for QueryIter<'a, Q> {
+	type Item = (&'a Entity, Q::Tuple);
+	fn next(&mut self) -> Option<Self::Item> {
+		loop {
+			let entity_id = self.world.entities().nth(self.entity_index)?;
+			self.entity_index += 1;
+			if let Some(result) = Q::query_entity(self.world, entity_id) {
+				return Some((entity_id, result));
+			}
+		}
+	}
+}
+
+/// A [QueryMut] iterator for a mutable [World]
 pub struct QueryMutIter<'a, Q> {
 	world: &'a mut World,
-	marker: PhantomData<Q>,
 	entity_index: usize,
+	marker: PhantomData<Q>,
 }
 
 impl<'a, Q: QueryMut<'a> + 'a> Iterator for QueryMutIter<'a, Q> {
@@ -77,32 +124,12 @@ impl<'a, Q: QueryMut<'a> + 'a> Iterator for QueryMutIter<'a, Q> {
 	}
 }
 
-pub struct QueryIter<'a, Q> {
-	world: &'a World,
-	marker: PhantomData<Q>,
-	entity_index: usize,
-}
-
-impl<'a, Q: Query<'a> + 'a> Iterator for QueryIter<'a, Q> {
-	type Item = (&'a Entity, Q::Tuple);
-	fn next(&mut self) -> Option<Self::Item> {
-		loop {
-			let entity_id = self.world.entities().nth(self.entity_index)?;
-			self.entity_index += 1;
-			if let Some(result) = Q::query_entity(self.world, entity_id) {
-				return Some((entity_id, result));
-			}
-		}
-	}
-}
-
 macro_rules! impl_queries {
 	($($generic:ident),* ) => {
 		impl<'a, $($generic),*> Query<'a> for ( $($generic),* ,)
 		where
 			$($generic: Fetch<'a>),*
 		{
-			// The whole tuple. Thankfully what comes in, goes out!
 			type Tuple = ( $( $generic),* ,);
 
 			fn query_entity(world: &'a World, entity: &'a Entity) -> Option<Self::Tuple> {
@@ -114,8 +141,8 @@ macro_rules! impl_queries {
 			fn query(world: &'a World) -> QueryIter<'a, Self::Tuple>  {
 				QueryIter {
 					world,
-					marker: PhantomData::default(),
 					entity_index: 0,
+					marker: PhantomData::default(),
 				}
 			}
 		}
@@ -141,8 +168,8 @@ macro_rules! impl_queries {
 			fn query_mut(world: &'a mut World) -> QueryMutIter<'a, Self::Tuple>  {
 				QueryMutIter {
 					world,
-					marker: PhantomData::default(),
 					entity_index: 0,
+					marker: PhantomData::default(),
 				}
 			}
 		}

@@ -40,7 +40,7 @@ fn main() {
 
 	// trailing comma for a single-element tuple. TBD.
 	for (_, (pos,)) in world.query_mut::<(&mut Position,)>() {
-		print!("Moving...");
+		print!("Moving... ");
 		*pos = Position(0, 0);
 		println!("Travelling without moving...");
 		pos.0 = 69;
