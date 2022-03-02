@@ -7,6 +7,7 @@ fn main() {
 		.spawn()
 		.with("Hello")
 		.with(String::from("World"))
+		.with(Glyph('?')) // overwrite and Drop '?'
 		.with(Glyph('!'))
 		.build();
 
@@ -22,6 +23,7 @@ fn main() {
 		.build();
 
 	world.add_component(&player, Glyph('P'));
+	world.add_component(&player, Player); // overwrite and drop Player
 
 	world.spawn().with(Position(9, 1)).with(Glyph('N'));
 

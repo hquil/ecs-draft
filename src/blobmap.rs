@@ -123,6 +123,7 @@ where
 		let size_in_bytes = self.type_info.size_in_bytes;
 		let raw_data = slice::from_raw_parts(&value as *const _ as *const u8, size_in_bytes);
 		if let Some(&index) = self.indices.get(&key) {
+			self.just_drop(&key);
 			let range = self.range(index);
 			let existing_data = &mut self.data[range];
 			existing_data.copy_from_slice(raw_data);
